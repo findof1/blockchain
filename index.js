@@ -1,4 +1,7 @@
 const CryptoJS = require("crypto-js");
+const express = require('express');
+const app = express();
+const port = 3000;
 
 class Transaction {
   constructor(amount, payer, payee) {
@@ -133,10 +136,50 @@ class Wallet {
 }
 
 const chain = new Blockchain();
-chain.addWallet(new Wallet("Findof"));
-chain.getWalletByPublicKey("Findof").addBalance(25)
-chain.mineAll("Findof");
-chain.addWallet(new Wallet("Mr Hat"));
-chain.addBlock([new Transaction(25, "Findof", "Mr Hat")]);
-chain.addBlock([new Transaction(20, "Mr Hat", "Findof")]);
-console.log(chain);
+
+app.get('/addWallet', (req, res) => {
+  const { publicKey } = req.body;
+  if (!publicKey) {
+    return res.status(400).send('Public Key is required');
+  }
+
+  try {
+    const newWallet = new Wallet(publicKey);
+    chain.addWallet(newWallet);
+    res.status(201).json({ message: 'Wallet added successfully' });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.get('/createTransaction', (req, res) => {
+  const { amount, payer, payee } = req.body;
+  if (!amount || !payer || !payee) {
+    return res.status(400).send('Please send all required fields (amount, payer, payee)');
+  }
+
+  try {
+    chain.addBlock([new Transaction(25, "Findof", "Mr Hat")]);
+    res.status(201).json({ message: 'Transaction created successfully' });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.get('/mine', (req, res) => {
+  const { miner } = req.body;
+  if (!miner) {
+    return res.status(400).send('Please send all required fields (miner)');
+  }
+
+  try {
+    chain.mineAll("Findof");
+    res.status(201).json({ message: 'Mined block successfully' });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Example app listening at http://localhost:${port}`);
+});

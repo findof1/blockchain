@@ -1,8 +1,9 @@
 const CryptoJS = require("crypto-js");
+const crypto = require("crypto");
 const express = require('express');
 const app = express();
 const port = 3000;
-
+app.use(express.json());
 class Transaction {
   constructor(amount, payer, payee) {
     this.amount = amount;
@@ -19,28 +20,36 @@ class Block {
     this.transactions = transactions;
     this.nonce = 0;
     this.hash = this.createHash();
-    this.difficulty = 4;
+
   }
 
-  mine() {
+  mine(difficulty) {
+
     while (true) {
+
       this.nonce++;
+
       const hash = this.createHash();
+      
       if (
-        hash.substring(0, this.difficulty) ===
-        Array(this.difficulty + 1).join("0")
+        hash.substring(0, difficulty) ===
+        Array(difficulty + 1).join("0")
       ) {
         console.log(`Mined ${this.nonce}`);
         return true;
       }
+      
     }
   }
 
   createHash() {
+
     let data = `${this.timestamp}${this.prevHash}${JSON.stringify(
       this.transactions
     )}${this.nonce}`;
+
     const newHash = CryptoJS.SHA256(data).toString(CryptoJS.enc.Hex);
+
     return newHash;
   }
 }
@@ -51,6 +60,7 @@ class Blockchain {
 
     this.wallets = [];
     this.mining = [new Block(null, new Transaction(10, "genisis block", "genisis block 2")),];
+    this.difficulty = 4;
   }
 
   getLastBlock() {
@@ -70,13 +80,40 @@ class Blockchain {
     return null;
   }
 
-  mineAll(minerKey) {
-    const minerWallet = chain.getWalletByPublicKey(minerKey);
+  getWalletByUsername(username) {
+    for (let i = 0; i < this.wallets.length; i++) {
+      if (this.wallets[i].username === username) {
+        return this.wallets[i];
+      }
+    }
+    return null;
+  }
+
+  adjustDifficulty() {
+    const lastBlockTimestamp = this.getLastBlock().timestamp
+    const timeDiff = Date.now() / 1000 - lastBlockTimestamp;
+    const targetTimePerBlock = 60; 
+
+    if (timeDiff < targetTimePerBlock * 0.5) {
+      this.difficulty++;
+    } else if (timeDiff > targetTimePerBlock * 2) {
+      this.difficulty--;
+    }
+
+    this.difficulty = Math.max(this.difficulty, 10);
+  }
+
+  mineAll(minerWallet) {
+
     for (let i = this.mining.length; i > 0; i--) {
-      this.mining[i-1].mine();
+      this.mining[i-1].mine(this.difficulty);
+
       minerWallet.balance += 5;
+
       this.chain.push(this.mining[i-1]);
+
       this.mining.pop();
+
     }
   }
 
@@ -122,12 +159,22 @@ class Blockchain {
 }
 
 class Wallet {
-  constructor(publicKey) {
-    this.publicKey = publicKey;
+  constructor(username) {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 2048, 
+      publicKeyEncoding: {
+        type: 'spki',       
+        format: 'pem',     
+      },
+      privateKeyEncoding: {
+        type: 'pkcs8',      
+        format: 'pem',     
+      },
+    });
+    this.username = username;
+    this.publicKey = "BVC" + publicKey;
     this.balance = 0;
-    this.privateKey = CryptoJS.lib.WordArray.random(32).toString(
-      CryptoJS.enc.Hex
-    );
+    this.privateKey = privateKey
   }
 
   addBalance(num){
@@ -136,15 +183,16 @@ class Wallet {
 }
 
 const chain = new Blockchain();
+chain.addWallet(new Wallet("Findof"));
 
-app.get('/addWallet', (req, res) => {
-  const { publicKey } = req.body;
-  if (!publicKey) {
-    return res.status(400).send('Public Key is required');
+app.post('/addWallet', (req, res) => {
+  const username = req.body.username;
+  if (!username) {
+    return res.status(400).send('Username is required');
   }
 
   try {
-    const newWallet = new Wallet(publicKey);
+    const newWallet = new Wallet(username);
     chain.addWallet(newWallet);
     res.status(201).json({ message: 'Wallet added successfully' });
   } catch (error) {
@@ -152,7 +200,20 @@ app.get('/addWallet', (req, res) => {
   }
 });
 
-app.get('/createTransaction', (req, res) => {
+app.get('/getPublicKeyFromUsername', (req, res) => {
+  const { username } = req.body;
+  if (!username) {
+    return res.status(400).send('Please send all required fields (username)');
+  }
+
+  try {
+    res.status(201).json({ publicKey: chain.getWalletByUsername(username).publicKey });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+app.post('/createTransaction', (req, res) => {
   const { amount, payer, payee } = req.body;
   if (!amount || !payer || !payee) {
     return res.status(400).send('Please send all required fields (amount, payer, payee)');
@@ -166,20 +227,66 @@ app.get('/createTransaction', (req, res) => {
   }
 });
 
-app.get('/mine', (req, res) => {
+app.post('/mine/publicKey', (req, res) => {
   const { miner } = req.body;
   if (!miner) {
     return res.status(400).send('Please send all required fields (miner)');
   }
 
   try {
-    chain.mineAll("Findof");
+    chain.mineAll(chain.getWalletByPublicKey(miner)); 
     res.status(201).json({ message: 'Mined block successfully' });
   } catch (error) {
     res.status(500).send(error.message);
   }
+
+});
+
+app.post('/mine/username', (req, res) => {
+  const { miner } = req.body;
+  if (!miner) {
+    return res.status(400).send('Please send all required fields (miner)');
+  }
+
+  try {
+    chain.mineAll(chain.getWalletByUsername(miner)); 
+    res.status(201).json({ message: 'Mined block successfully' });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+
+});
+
+app.get('/checkBalance/publicKey', (req, res) => {
+  const { publicKey } = req.body;
+  if (!publicKey) {
+    return res.status(400).send('Please send all required fields (publicKey)');
+  }
+
+  try {
+    const wallet = chain.getWalletByPublicKey(publicKey);
+    res.status(201).json({ balance: wallet.balance });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+
+});
+
+app.get('/checkBalance/username', (req, res) => {
+  const { username } = req.body;
+  if (!username) {
+    return res.status(400).send('Please send all required fields (publicKey)');
+  }
+
+  try {
+    const wallet = chain.getWalletByUsername(username);
+    res.status(201).json({ balance: wallet.balance });
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+
 });
 
 app.listen(port, () => {
-  console.log(`Example app listening at http://localhost:${port}`);
+  console.log(`Listening at port ${port}`);
 });

@@ -1,9 +1,13 @@
 const CryptoJS = require("crypto-js");
 const crypto = require("crypto");
 const express = require('express');
+
+
 const app = express();
 const port = 3000;
 app.use(express.json());
+
+
 class Transaction {
   constructor(amount, payer, payee) {
     this.amount = amount;
@@ -157,6 +161,7 @@ class Blockchain {
     }
   }
 }
+
 
 class Wallet {
   constructor(username) {

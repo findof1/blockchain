@@ -33,9 +33,13 @@ app.get("/getPublicKeyFromUsername", (req, res) => {
   }
 
   try {
+    const wallet = chain.getWalletByUsername(username);
+    if(!wallet){
+      res.status(201).json({ message: "No wallet found" });
+    }
     res
       .status(201)
-      .json({ publicKey: chain.getWalletByUsername(username).publicKey });
+      .json({ publicKey: wallet.publicKey });
   } catch (error) {
     res.status(500).send(error.message);
   }
@@ -71,7 +75,11 @@ app.post("/mine/publicKey", (req, res) => {
   }
 
   try {
-    const result = chain.mineOne(chain.getWalletByPublicKey(miner));
+    const wallet = chain.getWalletByPublicKey(miner);
+    if(!wallet){
+      res.status(201).json({ message: "No wallet found" });
+    }
+    const result = chain.mineOne(wallet);
     if (result) {
       res.status(201).json({ message: "Mined block successfully" });
     } else {
@@ -89,6 +97,10 @@ app.post("/mine/username", (req, res) => {
   }
 
   try {
+    const wallet = chain.getWalletByUsername(miner);
+    if(!wallet){
+      res.status(201).json({ message: "No wallet found" });
+    }
     const result = chain.mineOne(chain.getWalletByUsername(miner));
     if (result) {
       res.status(201).json({ message: "Mined block successfully" });
@@ -108,6 +120,9 @@ app.get("/checkBalance/publicKey", (req, res) => {
 
   try {
     const wallet = chain.getWalletByPublicKey(publicKey);
+    if(!wallet){
+      res.status(201).json({ message: "No wallet found" });
+    }
     res.status(201).json({ balance: wallet.balance });
   } catch (error) {
     res.status(500).send(error.message);
@@ -122,10 +137,17 @@ app.get("/checkBalance/username", (req, res) => {
 
   try {
     const wallet = chain.getWalletByUsername(username);
+    if(!wallet){
+      res.status(201).json({ message: "No wallet found" });
+    }
     res.status(201).json({ balance: wallet.balance });
   } catch (error) {
     res.status(500).send(error.message);
   }
+});
+
+app.use((req, res) => {
+  res.status(404).send('Endpoint not found');
 });
 
 app.listen(port, () => {

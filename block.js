@@ -1,5 +1,5 @@
 import CryptoJS from "crypto-js";
-import crypto from "crypto";
+
 export class Block {
   constructor(prevHash, transactions) {
     this.timestamp = new Date().getTime();

@@ -6,13 +6,29 @@ const app = express();
 const port = 3000;
 app.use(express.json());
 
+const signTransaction = (transaction, privateKey) => {
+  const sign = crypto.createSign('SHA256');
+  sign.update(transaction.toString()).end();
+  const signature = sign.sign(privateKey, 'hex');
+  transaction.signature = signature;
+};
+
+const verifyTransaction = (transaction) => {
+  const verify = crypto.createVerify('SHA256');
+  verify.update(transaction.toString());
+  return verify.verify(transaction.payer, transaction.signature, 'hex');
+};
+
 class Transaction {
-  constructor(amount, payer, payee, fee = 5) {
+  constructor(amount, payer, payee, fee = 5, signature = null) {
     this.amount = amount;
     this.fee = fee;
     this.payer = payer;
     this.payee = payee;
+    this.signature = signature
   }
+
+
 }
 
 class Block {
@@ -205,7 +221,7 @@ app.post("/addWallet", (req, res) => {
   try {
     const newWallet = new Wallet(username);
     chain.addWallet(newWallet);
-    res.status(201).json({ message: "Wallet added successfully" });
+    res.status(201).json({ message: "Wallet added successfully", privateKey: newWallet.privateKey });
   } catch (error) {
     res.status(500).send(error.message);
   }
@@ -227,7 +243,7 @@ app.get("/getPublicKeyFromUsername", (req, res) => {
 });
 
 app.post("/createTransaction", (req, res) => {
-  const { amount, payer, payee } = req.body;
+  const { amount, payer, payee, privateKey } = req.body;
   if (!amount || !payer || !payee) {
     return res
       .status(400)
@@ -235,7 +251,14 @@ app.post("/createTransaction", (req, res) => {
   }
 
   try {
-    chain.addBlock([new Transaction(25, "Findof", "Mr Hat")]);
+    const transaction = new Transaction(amount, payer, payee);
+    signTransaction(transaction, privateKey);
+    
+    if (!verifyTransaction(transaction)) {
+      return res.status(400).send("Invalid transaction signature");
+    }
+
+    chain.addBlock([transaction]);
     res.status(201).json({ message: "Transaction created successfully" });
   } catch (error) {
     res.status(500).send(error.message);

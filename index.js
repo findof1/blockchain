@@ -1,17 +1,15 @@
 const CryptoJS = require("crypto-js");
 const crypto = require("crypto");
-const express = require('express');
-
+const express = require("express");
 
 const app = express();
 const port = 3000;
 app.use(express.json());
 
-
 class Transaction {
-  constructor(amount, payer, payee) {
+  constructor(amount, payer, payee, fee = 5) {
     this.amount = amount;
-    this.fee = 5;
+    this.fee = fee;
     this.payer = payer;
     this.payee = payee;
   }
@@ -24,30 +22,22 @@ class Block {
     this.transactions = transactions;
     this.nonce = 0;
     this.hash = this.createHash();
-
   }
 
   mine(difficulty) {
-
     while (true) {
-
       this.nonce++;
 
       const hash = this.createHash();
-      
-      if (
-        hash.substring(0, difficulty) ===
-        Array(difficulty + 1).join("0")
-      ) {
+
+      if (hash.substring(0, difficulty) === Array(difficulty + 1).join("0")) {
         console.log(`Mined ${this.nonce}`);
-        return true;
+        return this.transactions.length;
       }
-      
     }
   }
 
   createHash() {
-
     let data = `${this.timestamp}${this.prevHash}${JSON.stringify(
       this.transactions
     )}${this.nonce}`;
@@ -59,12 +49,22 @@ class Block {
 }
 
 class Blockchain {
-  constructor() {
+  constructor(initVal) {
     this.chain = [];
 
     this.wallets = [];
-    this.mining = [new Block(null, new Transaction(10, "genisis block", "genisis block 2")),];
-    this.difficulty = 4;
+    const initialMining = [];
+    for (let i = 0; i < initVal / 1000; i++) {
+      const transactions = [];
+      for (let j = 0; j < 1000 / 5; j++) {
+        transactions.push(
+          new Transaction(0, crypto.randomUUID(), crypto.randomUUID())
+        );
+      }
+      initialMining.push(new Block(null, transactions));
+    }
+    this.mining = initialMining;
+    this.difficulty = 1;
   }
 
   getLastBlock() {
@@ -76,6 +76,7 @@ class Blockchain {
   }
 
   getWalletByPublicKey(key) {
+    console.log(this.wallets);
     for (let i = 0; i < this.wallets.length; i++) {
       if (this.wallets[i].publicKey === key) {
         return this.wallets[i];
@@ -94,9 +95,9 @@ class Blockchain {
   }
 
   adjustDifficulty() {
-    const lastBlockTimestamp = this.getLastBlock().timestamp
+    const lastBlockTimestamp = this.getLastBlock().timestamp;
     const timeDiff = Date.now() / 1000 - lastBlockTimestamp;
-    const targetTimePerBlock = 60; 
+    const targetTimePerBlock = 60;
 
     if (timeDiff < targetTimePerBlock * 0.5) {
       this.difficulty++;
@@ -107,18 +108,20 @@ class Blockchain {
     this.difficulty = Math.max(this.difficulty, 10);
   }
 
-  mineAll(minerWallet) {
+  mineOne(minerWallet) {
+    if (this.mining.length > 0) {
+      const totalTransactions = this.mining[this.mining.length - 1].mine(
+        this.difficulty
+      );
 
-    for (let i = this.mining.length; i > 0; i--) {
-      this.mining[i-1].mine(this.difficulty);
+      minerWallet.balance += totalTransactions * 5;
 
-      minerWallet.balance += 5;
+      this.chain.push(this.mining[this.mining.length - 1]);
 
-      this.chain.push(this.mining[i-1]);
-
-      this.mining.pop();
-
+      this.mining = this.mining.shift();
+      return true;
     }
+    return false;
   }
 
   addBlock(transactions) {
@@ -152,9 +155,7 @@ class Blockchain {
       return true;
     });
     if (verifiedTransactions.length > 0) {
-      console.log(
-        `Transactions are valid.`
-      );
+      console.log(`Transactions are valid.`);
       this.mining.push(
         new Block(this.getLastBlock().hash, verifiedTransactions)
       );
@@ -162,110 +163,125 @@ class Blockchain {
   }
 }
 
-
 class Wallet {
   constructor(username) {
-    const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
-      modulusLength: 2048, 
+    const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
+      modulusLength: 2048,
       publicKeyEncoding: {
-        type: 'spki',       
-        format: 'pem',     
+        type: "spki",
+        format: "pem",
       },
       privateKeyEncoding: {
-        type: 'pkcs8',      
-        format: 'pem',     
+        type: "pkcs8",
+        format: "pem",
       },
     });
+
+    const cleanedPublicKey = publicKey
+      .replace("-----BEGIN PUBLIC KEY-----", "")
+      .replace("-----END PUBLIC KEY-----", "");
+
     this.username = username;
-    this.publicKey = "BVC" + publicKey;
+    this.publicKey = "BVC" + cleanedPublicKey;
     this.balance = 0;
-    this.privateKey = privateKey
+    this.privateKey = privateKey;
   }
 
-  addBalance(num){
+  addBalance(num) {
     this.balance += num;
   }
 }
 
-const chain = new Blockchain();
+//const chain = new Blockchain(50000000);
+const chain = new Blockchain(10000);
 chain.addWallet(new Wallet("Findof"));
 
-app.post('/addWallet', (req, res) => {
+app.post("/addWallet", (req, res) => {
   const username = req.body.username;
   if (!username) {
-    return res.status(400).send('Username is required');
+    return res.status(400).send("Username is required");
   }
 
   try {
     const newWallet = new Wallet(username);
     chain.addWallet(newWallet);
-    res.status(201).json({ message: 'Wallet added successfully' });
+    res.status(201).json({ message: "Wallet added successfully" });
   } catch (error) {
     res.status(500).send(error.message);
   }
 });
 
-app.get('/getPublicKeyFromUsername', (req, res) => {
+app.get("/getPublicKeyFromUsername", (req, res) => {
   const { username } = req.body;
   if (!username) {
-    return res.status(400).send('Please send all required fields (username)');
+    return res.status(400).send("Please send all required fields (username)");
   }
 
   try {
-    res.status(201).json({ publicKey: chain.getWalletByUsername(username).publicKey });
+    res
+      .status(201)
+      .json({ publicKey: chain.getWalletByUsername(username).publicKey });
   } catch (error) {
     res.status(500).send(error.message);
   }
 });
 
-app.post('/createTransaction', (req, res) => {
+app.post("/createTransaction", (req, res) => {
   const { amount, payer, payee } = req.body;
   if (!amount || !payer || !payee) {
-    return res.status(400).send('Please send all required fields (amount, payer, payee)');
+    return res
+      .status(400)
+      .send("Please send all required fields (amount, payer, payee)");
   }
 
   try {
     chain.addBlock([new Transaction(25, "Findof", "Mr Hat")]);
-    res.status(201).json({ message: 'Transaction created successfully' });
+    res.status(201).json({ message: "Transaction created successfully" });
   } catch (error) {
     res.status(500).send(error.message);
   }
 });
 
-app.post('/mine/publicKey', (req, res) => {
+app.post("/mine/publicKey", (req, res) => {
   const { miner } = req.body;
   if (!miner) {
-    return res.status(400).send('Please send all required fields (miner)');
+    return res.status(400).send("Please send all required fields (miner)");
   }
 
   try {
-    chain.mineAll(chain.getWalletByPublicKey(miner)); 
-    res.status(201).json({ message: 'Mined block successfully' });
+    const result = chain.mineOne(chain.getWalletByPublicKey(miner));
+    if (result) {
+      res.status(201).json({ message: "Mined block successfully" });
+    } else {
+      res.status(201).json({ message: "No blocks left to mine" });
+    }
   } catch (error) {
     res.status(500).send(error.message);
   }
-
 });
 
-app.post('/mine/username', (req, res) => {
+app.post("/mine/username", (req, res) => {
   const { miner } = req.body;
   if (!miner) {
-    return res.status(400).send('Please send all required fields (miner)');
+    return res.status(400).send("Please send all required fields (miner)");
   }
 
   try {
-    chain.mineAll(chain.getWalletByUsername(miner)); 
-    res.status(201).json({ message: 'Mined block successfully' });
+    const result = chain.mineOne(chain.getWalletByUsername(miner));
+    if (result) {
+      res.status(201).json({ message: "Mined block successfully" });
+    } else {
+      res.status(201).json({ message: "No blocks left to mine" });
+    }
   } catch (error) {
     res.status(500).send(error.message);
   }
-
 });
 
-app.get('/checkBalance/publicKey', (req, res) => {
+app.get("/checkBalance/publicKey", (req, res) => {
   const { publicKey } = req.body;
   if (!publicKey) {
-    return res.status(400).send('Please send all required fields (publicKey)');
+    return res.status(400).send("Please send all required fields (publicKey)");
   }
 
   try {
@@ -274,13 +290,12 @@ app.get('/checkBalance/publicKey', (req, res) => {
   } catch (error) {
     res.status(500).send(error.message);
   }
-
 });
 
-app.get('/checkBalance/username', (req, res) => {
+app.get("/checkBalance/username", (req, res) => {
   const { username } = req.body;
   if (!username) {
-    return res.status(400).send('Please send all required fields (publicKey)');
+    return res.status(400).send("Please send all required fields (publicKey)");
   }
 
   try {
@@ -289,7 +304,6 @@ app.get('/checkBalance/username', (req, res) => {
   } catch (error) {
     res.status(500).send(error.message);
   }
-
 });
 
 app.listen(port, () => {

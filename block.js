@@ -1,12 +1,12 @@
 import CryptoJS from "crypto-js";
 
 export class Block {
-  constructor(prevHash, transactions) {
-    this.timestamp = new Date().getTime();
+  constructor(prevHash, transactions, hash = null, timestamp = new Date().getTime(), nonce = 0) {
+    this.timestamp = timestamp;
     this.prevHash = prevHash;
     this.transactions = transactions;
-    this.nonce = 0;
-    this.hash = this.createHash();
+    this.nonce = nonce;
+    this.hash = hash ? hash : this.createHash();
   }
 
   mine(difficulty) {

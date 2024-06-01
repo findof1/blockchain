@@ -1,32 +1,57 @@
 import { Block } from "./block.js";
+import { client } from "./index.js";
 import { Transaction } from "./transaction.js";
 import crypto from "crypto";
+import { Wallet } from "./wallet.js";
 
 export class Blockchain {
-  constructor(initVal) {
-    this.chain = [];
+  constructor(
+    initVal,
+    chain = [],
+    wallets = [],
+    mining = null,
+    difficulty = 1
+  ) {
+    this.chainId = 1;
+    this.chain = chain;
 
-    this.wallets = [];
+    this.wallets = wallets;
     const initialMining = [];
-    for (let i = 0; i < initVal / 1000; i++) {
-      const transactions = [];
-      for (let j = 0; j < 1000 / 5; j++) {
-        transactions.push(
-          new Transaction(0, crypto.randomUUID(), crypto.randomUUID())
-        );
+    if (!mining) {
+      let prevHash = null;
+      for (let i = 0; i < initVal / 1000; i++) {
+        const transactions = [];
+
+        for (let j = 0; j < 1000 / 5; j++) {
+          const transaction = new Transaction(
+            0,
+            crypto.randomUUID(),
+            crypto.randomUUID()
+          );
+          transactions.push(transaction);
+        }
+        const block = new Block(prevHash, transactions);
+        initialMining.push(block);
+        prevHash = block.hash;
       }
-      initialMining.push(new Block(null, transactions));
     }
-    this.mining = initialMining;
-    this.difficulty = 1;
+    this.mining = mining || initialMining;
+    this.difficulty = difficulty;
   }
 
   getLastBlock() {
     return this.chain[this.chain.length - 1];
   }
 
-  addWallet(wallet) {
+  async addWallet(wallet) {
     this.wallets.push(wallet);
+    client.connect();
+    const database = client.db("your_database_name");
+    const collection = database.collection("wallets");
+    await collection.findOneAndUpdate(
+      { chainId: 1 },
+      { $push: { wallets: wallet } }
+    );
   }
 
   getWalletByPublicKey(key) {
@@ -62,7 +87,7 @@ export class Blockchain {
     this.difficulty = Math.max(this.difficulty, 10);
   }
 
-  mineOne(minerWallet) {
+  async mineOne(minerWallet) {
     if (this.mining.length > 0) {
       const totalTransactions = this.mining[this.mining.length - 1].mine(
         this.difficulty
@@ -72,13 +97,26 @@ export class Blockchain {
 
       this.chain.push(this.mining[this.mining.length - 1]);
 
+      client.connect();
+      const database = client.db("your_database_name");
+      const collection = database.collection("wallets");
+      await collection.findOneAndUpdate(
+        { chainId: 1 },
+        { $push: { chain: this.mining[this.mining.length - 1] } }
+      );
+      const dbChain = await collection.findOne({ chainId: 1 });
+      dbChain.wallets.shift();
+      await collection.findOneAndUpdate(
+        { chainId: 1 },
+        { $set: { wallets: dbChain.wallets } }
+      );
       this.mining = this.mining.shift();
       return true;
     }
     return false;
   }
 
-  addBlock(transactions) {
+  async addBlock(transactions) {
     if (!transactions[0]) {
       return;
     }
@@ -112,6 +150,13 @@ export class Blockchain {
       console.log(`Transactions are valid.`);
       this.mining.push(
         new Block(this.getLastBlock().hash, verifiedTransactions)
+      );
+      client.connect();
+      const database = client.db("your_database_name");
+      const collection = database.collection("wallets");
+      await collection.findOneAndUpdate(
+        { chainId: 1 },
+        { $push: { mining: new Block(this.getLastBlock().hash, verifiedTransactions) } }
       );
     }
   }

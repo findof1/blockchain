@@ -122,20 +122,20 @@ app.post("/addWallet", async (req, res) => {
 
   try {
     const newWallet = new Wallet(username);
-    const res = await chain.addWallet(newWallet);
+    const result = await chain.addWallet(newWallet);
 
-    if (!res) {
-      res.status(500).json({
+    if (!result) {
+      return res.status(500).json({
         message: "A wallet with that username already exists",
       });
     }
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Wallet added successfully",
       privateKey: newWallet.privateKey,
     });
   } catch (error) {
-    res.status(500).send(error.message);
+    return res.status(500).send(error.message);
   }
 });
 
@@ -149,12 +149,12 @@ app.get("/getPublicKeyFromUsername", (req, res) => {
     const wallet = chain.getWalletByUsername(username);
 
     if (!wallet) {
-      res.status(201).json({ message: "No wallet found" });
+      return res.status(201).json({ message: "No wallet found" });
     }
 
-    res.status(201).json({ publicKey: wallet.publicKey });
+    return res.status(201).json({ publicKey: wallet.publicKey });
   } catch (error) {
-    res.status(500).send(error.message);
+    return res.status(500).send(error.message);
   }
 });
 
@@ -175,9 +175,9 @@ app.post("/createTransaction", async (req, res) => {
     }
 
     await chain.addBlock([transaction]);
-    res.status(201).json({ message: "Transaction created successfully" });
+    return res.status(201).json({ message: "Transaction created successfully" });
   } catch (error) {
-    res.status(500).send(error.message);
+    return res.status(500).send(error.message);
   }
 });
 
@@ -190,16 +190,16 @@ app.post("/mine/publicKey", async (req, res) => {
   try {
     const wallet = chain.getWalletByPublicKey(miner);
     if (!wallet) {
-      res.status(201).json({ message: "No wallet found" });
+      return res.status(201).json({ message: "No wallet found" });
     }
     const result = await chain.mineOne(wallet);
     if (result) {
-      res.status(201).json({ message: "Mined block successfully" });
+      return res.status(201).json({ message: "Mined block successfully" });
     } else {
-      res.status(201).json({ message: "No blocks left to mine" });
+      return res.status(201).json({ message: "No blocks left to mine" });
     }
   } catch (error) {
-    res.status(500).send(error.message);
+    return res.status(500).send(error.message);
   }
 });
 
@@ -212,16 +212,16 @@ app.post("/mine/username", async (req, res) => {
   try {
     const wallet = chain.getWalletByUsername(miner);
     if (!wallet) {
-      res.status(201).json({ message: "No wallet found" });
+      return res.status(201).json({ message: "No wallet found" });
     }
     const result = await chain.mineOne(wallet);
     if (result) {
-      res.status(201).json({ message: "Mined block successfully" });
+      return res.status(201).json({ message: "Mined block successfully" });
     } else {
-      res.status(201).json({ message: "No blocks left to mine" });
+      return res.status(201).json({ message: "No blocks left to mine" });
     }
   } catch (error) {
-    res.status(500).send(error.message);
+    return res.status(500).send(error.message);
   }
 });
 
@@ -234,11 +234,11 @@ app.get("/checkBalance/publicKey", (req, res) => {
   try {
     const wallet = chain.getWalletByPublicKey(publicKey);
     if (!wallet) {
-      res.status(201).json({ message: "No wallet found" });
+      return res.status(201).json({ message: "No wallet found" });
     }
-    res.status(201).json({ balance: wallet.balance });
+    return res.status(201).json({ balance: wallet.balance });
   } catch (error) {
-    res.status(500).send(error.message);
+    return res.status(500).send(error.message);
   }
 });
 
@@ -251,16 +251,16 @@ app.get("/checkBalance/username", (req, res) => {
   try {
     const wallet = chain.getWalletByUsername(username);
     if (!wallet) {
-      res.status(201).json({ message: "No wallet found" });
+      return res.status(201).json({ message: "No wallet found" });
     }
-    res.status(201).json({ balance: wallet.balance });
+    return res.status(201).json({ balance: wallet.balance });
   } catch (error) {
-    res.status(500).send(error.message);
+    return res.status(500).send(error.message);
   }
 });
 
 app.use((req, res) => {
-  res
+  return res
     .status(404)
     .send(
       `Endpoint not found, you could also be using the incorrect request type. Currently you are using ${req.method}`

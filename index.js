@@ -251,7 +251,11 @@ app.get("/checkBalance/username", (req, res) => {
 });
 
 app.use((req, res) => {
-  res.status(404).send("Endpoint not found");
+  res
+    .status(404)
+    .send(
+      `Endpoint not found, you could also be using the incorrect request type. Currently you are using ${req.method}`
+    );
 });
 
 app.listen(port, async () => {

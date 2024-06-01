@@ -13,29 +13,30 @@ export class Blockchain {
   ) {
     this.chainId = 1;
     this.chain = chain;
-
     this.wallets = wallets;
-    const initialMining = [];
-    if (!mining) {
-      let prevHash = null;
-      for (let i = 0; i < initVal / 1000; i++) {
-        const transactions = [];
-
-        for (let j = 0; j < 1000 / 5; j++) {
-          const transaction = new Transaction(
-            0,
-            crypto.randomUUID(),
-            crypto.randomUUID()
-          );
-          transactions.push(transaction);
-        }
-        const block = new Block(prevHash, transactions);
-        initialMining.push(block);
-        prevHash = block.hash;
-      }
-    }
-    this.mining = mining || initialMining;
+    this.mining = mining || this.createInitialBlocks(initVal);
     this.difficulty = difficulty;
+  }
+
+  createInitialBlocks(initVal) {
+    const initialMining = [];
+    let prevHash = null;
+
+    const transactionsPerBlock = 5;
+    const transactionFee = 5;
+    const totalBlocks = initVal / (transactionsPerBlock * transactionFee);
+
+    for (let i = 0; i < totalBlocks; i++) {
+      const transactions = Array.from(
+        { length: transactionsPerBlock },
+        () => new Transaction(0, crypto.randomUUID(), crypto.randomUUID())
+      );
+      const block = new Block(prevHash, transactions);
+      initialMining.push(block);
+      prevHash = block.hash;
+    }
+
+    return initialMining;
   }
 
   getLastBlock() {
@@ -43,33 +44,37 @@ export class Blockchain {
   }
 
   async addWallet(wallet) {
+    const existingWallet = this.getWalletByUsername(wallet.username);
+    if (existingWallet) {
+      console.error(`Wallet with username ${wallet.username} already exists.`);
+      return false;
+    }
+
     this.wallets.push(wallet);
-    client.connect();
-    const database = client.db("blockchain");
-    const collection = database.collection("BVC");
-    await collection.findOneAndUpdate(
-      { chainId: 1 },
-      { $push: { wallets: wallet } }
-    );
+
+    try {
+      await client.connect();
+      const database = client.db("blockchain");
+      const collection = database.collection("BVC");
+      await collection.findOneAndUpdate(
+        { chainId: this.chainId },
+        { $push: { wallets: wallet } }
+      );
+    } catch (error) {
+      console.error("Error updating database:", error);
+      return false;
+    } finally {
+      await client.close();
+      return true;
+    }
   }
 
   getWalletByPublicKey(key) {
-    console.log(this.wallets);
-    for (let i = 0; i < this.wallets.length; i++) {
-      if (this.wallets[i].publicKey === key) {
-        return this.wallets[i];
-      }
-    }
-    return null;
+    return this.wallets.find((wallet) => wallet.publicKey === key) || null;
   }
 
   getWalletByUsername(username) {
-    for (let i = 0; i < this.wallets.length; i++) {
-      if (this.wallets[i].username === username) {
-        return this.wallets[i];
-      }
-    }
-    return null;
+    return this.wallets.find((wallet) => wallet.username === username) || null;
   }
 
   adjustDifficulty() {
@@ -87,42 +92,52 @@ export class Blockchain {
   }
 
   async mineOne(minerWallet) {
-    if (this.mining.length > 0) {
-      const totalTransactions = this.mining[this.mining.length - 1].mine(
-        this.difficulty
-      );
+    if (this.mining.length === 0) {
+      return false;
+    }
 
-      minerWallet.balance += totalTransactions * 5;
+    const blockToMine = this.mining[0];
+    const totalTransactions = blockToMine.mine(this.difficulty);
 
-      this.chain.push(this.mining[this.mining.length - 1]);
+    minerWallet.balance += totalTransactions * 5;
 
-      client.connect();
+    try {
+      await client.connect();
       const database = client.db("blockchain");
       const collection = database.collection("BVC");
+
       await collection.findOneAndUpdate(
-        { chainId: 1 },
-        { $push: { chain: this.mining[this.mining.length - 1] } }
+        { "wallets.publicKey": minerWallet.publicKey },
+        { $set: { "wallets.$.balance": minerWallet.balance } }
       );
-      const dbChain = await collection.findOne({ chainId: 1 });
-      dbChain.wallets.shift();
+
       await collection.findOneAndUpdate(
-        { chainId: 1 },
-        { $set: { wallets: dbChain.wallets } }
+        { chainId: this.chainId },
+        { $push: { chain: blockToMine } }
       );
-      this.mining = this.mining.shift();
-      return true;
+
+      await collection.findOneAndUpdate(
+        { chainId: this.chainId },
+        { $pop: { mining: -1 } }
+      );
+    } catch (error) {
+      console.error("Error updating database:", error);
+    } finally {
+      await client.close();
     }
-    return false;
+
+    this.chain.push(blockToMine);
+    this.mining.shift();
+    return true;
   }
 
   async addBlock(transactions) {
-    if (!transactions[0]) {
-      return;
-    }
+    if (!transactions.length) return;
 
     const verifiedTransactions = transactions.filter((transaction) => {
       const payerWallet = this.getWalletByPublicKey(transaction.payer);
       const payeeWallet = this.getWalletByPublicKey(transaction.payee);
+
       if (!payerWallet || !payeeWallet) {
         console.error(
           "One of the parties involved in the transaction does not exist."
@@ -130,8 +145,8 @@ export class Blockchain {
         return false;
       }
 
-      if (payerWallet == payeeWallet) {
-        console.error("Cannot send create a transaction to yourself.");
+      if (payerWallet === payeeWallet) {
+        console.error("Cannot create a transaction to yourself.");
         return false;
       }
 
@@ -145,22 +160,27 @@ export class Blockchain {
 
       return true;
     });
-    if (verifiedTransactions.length > 0) {
-      console.log(`Transactions are valid.`);
-      this.mining.push(
-        new Block(this.getLastBlock().hash, verifiedTransactions)
-      );
-      client.connect();
+
+    if (!verifiedTransactions.length) return;
+
+    console.log("Transactions are valid.");
+    this.adjustDifficulty();
+    const newBlock = new Block(this.getLastBlock().hash, verifiedTransactions);
+    this.mining.push(newBlock);
+
+    try {
+      await client.connect();
       const database = client.db("blockchain");
       const collection = database.collection("BVC");
+
       await collection.findOneAndUpdate(
-        { chainId: 1 },
-        {
-          $push: {
-            mining: new Block(this.getLastBlock().hash, verifiedTransactions),
-          },
-        }
+        { chainId: this.chainId },
+        { $push: { mining: newBlock } }
       );
+    } catch (error) {
+      console.error("Error updating database:", error);
+    } finally {
+      await client.close();
     }
   }
 }

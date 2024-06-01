@@ -25,8 +25,4 @@ export class Wallet {
     this.balance = 0;
     this.privateKey = privateKey;
   }
-
-  addBalance(num) {
-    this.balance += num;
-  }
 }

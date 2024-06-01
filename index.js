@@ -122,7 +122,14 @@ app.post("/addWallet", async (req, res) => {
 
   try {
     const newWallet = new Wallet(username);
-    await chain.addWallet(newWallet);
+    const res = await chain.addWallet(newWallet);
+
+    if (!res) {
+      res.status(500).json({
+        message: "A wallet with that username already exists",
+      });
+    }
+
     res.status(201).json({
       message: "Wallet added successfully",
       privateKey: newWallet.privateKey,
@@ -140,9 +147,11 @@ app.get("/getPublicKeyFromUsername", (req, res) => {
 
   try {
     const wallet = chain.getWalletByUsername(username);
+
     if (!wallet) {
       res.status(201).json({ message: "No wallet found" });
     }
+
     res.status(201).json({ publicKey: wallet.publicKey });
   } catch (error) {
     res.status(500).send(error.message);

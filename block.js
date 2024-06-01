@@ -1,7 +1,13 @@
 import CryptoJS from "crypto-js";
 
 export class Block {
-  constructor(prevHash, transactions, hash = null, timestamp = new Date().getTime(), nonce = 0) {
+  constructor(
+    prevHash,
+    transactions,
+    hash = null,
+    timestamp = new Date().getTime(),
+    nonce = 0
+  ) {
     this.timestamp = timestamp;
     this.prevHash = prevHash;
     this.transactions = transactions;

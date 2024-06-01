@@ -61,25 +61,51 @@ async function getChain() {
       return false;
     }
 
-    const mining = result.mining.map(block => {
-      const transactions = block.transactions.map(tx => new Transaction(
-        tx.amount, tx.payer, tx.payee, tx.fee, tx.signature
-      ));
-      return new Block(block.prevHash, transactions, block.hash, block.timestamp, block.nonce);
+    const mining = result.mining.map((block) => {
+      const transactions = block.transactions.map(
+        (tx) =>
+          new Transaction(tx.amount, tx.payer, tx.payee, tx.fee, tx.signature)
+      );
+      return new Block(
+        block.prevHash,
+        transactions,
+        block.hash,
+        block.timestamp,
+        block.nonce
+      );
     });
 
-    const chainArr = result.chain.map(block => {
-      const transactions = block.transactions.map(tx => new Transaction(
-        tx.amount, tx.payer, tx.payee, tx.fee, tx.signature
-      ));
-      return new Block(block.prevHash, transactions, block.hash, block.timestamp, block.nonce);
+    const chainArr = result.chain.map((block) => {
+      const transactions = block.transactions.map(
+        (tx) =>
+          new Transaction(tx.amount, tx.payer, tx.payee, tx.fee, tx.signature)
+      );
+      return new Block(
+        block.prevHash,
+        transactions,
+        block.hash,
+        block.timestamp,
+        block.nonce
+      );
     });
 
-    const walletArr = result.wallets.map(wallet => new Wallet(
-      wallet.username, wallet.publicKey, wallet.privateKey, wallet.balance
-    ));
+    const walletArr = result.wallets.map(
+      (wallet) =>
+        new Wallet(
+          wallet.username,
+          wallet.publicKey,
+          wallet.privateKey,
+          wallet.balance
+        )
+    );
 
-    chain = new Blockchain(null, chainArr, walletArr, mining, result.difficulty);
+    chain = new Blockchain(
+      null,
+      chainArr,
+      walletArr,
+      mining,
+      result.difficulty
+    );
     return true;
   } catch (error) {
     console.error("Error getting chain:", error);

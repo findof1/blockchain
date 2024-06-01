@@ -2,7 +2,6 @@ import { Block } from "./block.js";
 import { client } from "./index.js";
 import { Transaction } from "./transaction.js";
 import crypto from "crypto";
-import { Wallet } from "./wallet.js";
 
 export class Blockchain {
   constructor(
@@ -46,8 +45,8 @@ export class Blockchain {
   async addWallet(wallet) {
     this.wallets.push(wallet);
     client.connect();
-    const database = client.db("your_database_name");
-    const collection = database.collection("wallets");
+    const database = client.db("blockchain");
+    const collection = database.collection("BVC");
     await collection.findOneAndUpdate(
       { chainId: 1 },
       { $push: { wallets: wallet } }
@@ -98,8 +97,8 @@ export class Blockchain {
       this.chain.push(this.mining[this.mining.length - 1]);
 
       client.connect();
-      const database = client.db("your_database_name");
-      const collection = database.collection("wallets");
+      const database = client.db("blockchain");
+      const collection = database.collection("BVC");
       await collection.findOneAndUpdate(
         { chainId: 1 },
         { $push: { chain: this.mining[this.mining.length - 1] } }
@@ -152,11 +151,15 @@ export class Blockchain {
         new Block(this.getLastBlock().hash, verifiedTransactions)
       );
       client.connect();
-      const database = client.db("your_database_name");
-      const collection = database.collection("wallets");
+      const database = client.db("blockchain");
+      const collection = database.collection("BVC");
       await collection.findOneAndUpdate(
         { chainId: 1 },
-        { $push: { mining: new Block(this.getLastBlock().hash, verifiedTransactions) } }
+        {
+          $push: {
+            mining: new Block(this.getLastBlock().hash, verifiedTransactions),
+          },
+        }
       );
     }
   }

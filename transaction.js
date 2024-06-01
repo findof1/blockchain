@@ -1,16 +1,16 @@
 import crypto from "crypto";
 
 export const signTransaction = (transaction, privateKey) => {
-  const sign = crypto.createSign('SHA256');
+  const sign = crypto.createSign("SHA256");
   sign.update(transaction.toString()).end();
-  const signature = sign.sign(privateKey, 'hex');
+  const signature = sign.sign(privateKey, "hex");
   transaction.signature = signature;
 };
 
 export const verifyTransaction = (transaction) => {
-  const verify = crypto.createVerify('SHA256');
+  const verify = crypto.createVerify("SHA256");
   verify.update(transaction.toString());
-  return verify.verify(transaction.payer, transaction.signature, 'hex');
+  return verify.verify(transaction.payer, transaction.signature, "hex");
 };
 
 export class Transaction {
@@ -19,8 +19,6 @@ export class Transaction {
     this.fee = fee;
     this.payer = payer;
     this.payee = payee;
-    this.signature = signature
+    this.signature = signature;
   }
-
-
 }

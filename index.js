@@ -268,10 +268,22 @@ app.use((req, res) => {
 });
 
 app.listen(port, async () => {
-  console.log(`Starting...`);
-  await start();
-  console.log(`Setup Complete!`);
   console.log(`Listening at port ${port}`);
 });
 
 export default app;
+
+
+(async () => {
+  console.log("Starting initialization...");
+  await start();
+  console.log("Setup Complete!");
+})();
+
+
+
+
+
+
+
+

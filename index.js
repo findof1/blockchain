@@ -175,7 +175,9 @@ app.post("/createTransaction", async (req, res) => {
     }
 
     await chain.addBlock([transaction]);
-    return res.status(201).json({ message: "Transaction created successfully" });
+    return res
+      .status(201)
+      .json({ message: "Transaction created successfully" });
   } catch (error) {
     return res.status(500).send(error.message);
   }
@@ -271,19 +273,10 @@ app.listen(port, async () => {
   console.log(`Listening at port ${port}`);
 });
 
-export default app;
-
-
 (async () => {
   console.log("Starting initialization...");
   await start();
   console.log("Setup Complete!");
 })();
 
-
-
-
-
-
-
-
+export default app;

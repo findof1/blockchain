@@ -10,11 +10,9 @@ import { MongoClient, ServerApiVersion } from "mongodb";
 import { Block } from "./block.js";
 
 const app = express();
-const port = 3000;
 app.use(express.json());
 
-const uri =
-  "mongodb+srv://findof:OOgZ4o1mEYhMNVmU@bvc.sykvkhs.mongodb.net/?retryWrites=true&w=majority&appName=BVC";
+const uri = "mongodb+srv://findof:OOgZ4o1mEYhMNVmU@bvc.sykvkhs.mongodb.net/?retryWrites=true&w=majority&appName=BVC";
 export const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -24,97 +22,78 @@ export const client = new MongoClient(uri, {
 });
 
 let chain;
+let initialized = false;
 
-async function start() {
-  const res = await getChain();
-  if (!res) {
-    chain = new Blockchain(10000);
+async function initialize() {
+  if (initialized) return;
+  console.log("Initializing blockchain...");
 
-    await createChain();
-  }
-}
-
-async function createChain() {
   try {
     await client.connect();
     const database = client.db("blockchain");
     const collection = database.collection("BVC");
+
     const result = await collection.findOne({ chainId: 1 });
-    if (!result) {
+    if (result) {
+      const mining = result.mining.map((block) => {
+        const transactions = block.transactions.map(
+          (tx) =>
+            new Transaction(tx.amount, tx.payer, tx.payee, tx.fee, tx.signature)
+        );
+        return new Block(
+          block.prevHash,
+          transactions,
+          block.hash,
+          block.timestamp,
+          block.nonce
+        );
+      });
+
+      const chainArr = result.chain.map((block) => {
+        const transactions = block.transactions.map(
+          (tx) =>
+            new Transaction(tx.amount, tx.payer, tx.payee, tx.fee, tx.signature)
+        );
+        return new Block(
+          block.prevHash,
+          transactions,
+          block.hash,
+          block.timestamp,
+          block.nonce
+        );
+      });
+
+      const walletArr = result.wallets.map(
+        (wallet) =>
+          new Wallet(
+            wallet.username,
+            wallet.publicKey,
+            wallet.privateKey,
+            wallet.balance
+          )
+      );
+
+      chain = new Blockchain(
+        null,
+        chainArr,
+        walletArr,
+        mining,
+        result.difficulty
+      );
+    } else {
+      chain = new Blockchain(10000);
       await collection.insertOne({ ...chain });
     }
+
+    console.log("Blockchain initialized.");
+    initialized = true;
   } catch (error) {
-    console.error("Error creating chain:", error);
-  } finally {
-    await client.close();
-  }
-}
-
-async function getChain() {
-  try {
-    await client.connect();
-    const database = client.db("blockchain");
-    const collection = database.collection("BVC");
-    const result = await collection.findOne({ chainId: 1 });
-
-    if (!result) {
-      return false;
-    }
-
-    const mining = result.mining.map((block) => {
-      const transactions = block.transactions.map(
-        (tx) =>
-          new Transaction(tx.amount, tx.payer, tx.payee, tx.fee, tx.signature)
-      );
-      return new Block(
-        block.prevHash,
-        transactions,
-        block.hash,
-        block.timestamp,
-        block.nonce
-      );
-    });
-
-    const chainArr = result.chain.map((block) => {
-      const transactions = block.transactions.map(
-        (tx) =>
-          new Transaction(tx.amount, tx.payer, tx.payee, tx.fee, tx.signature)
-      );
-      return new Block(
-        block.prevHash,
-        transactions,
-        block.hash,
-        block.timestamp,
-        block.nonce
-      );
-    });
-
-    const walletArr = result.wallets.map(
-      (wallet) =>
-        new Wallet(
-          wallet.username,
-          wallet.publicKey,
-          wallet.privateKey,
-          wallet.balance
-        )
-    );
-
-    chain = new Blockchain(
-      null,
-      chainArr,
-      walletArr,
-      mining,
-      result.difficulty
-    );
-    return true;
-  } catch (error) {
-    console.error("Error getting chain:", error);
-  } finally {
-    await client.close();
+    console.error("Error initializing blockchain:", error);
   }
 }
 
 app.post("/addWallet", async (req, res) => {
+  await initialize();
   const username = req.body.username;
   if (!username) {
     return res.status(400).send("Username is required");
@@ -139,7 +118,8 @@ app.post("/addWallet", async (req, res) => {
   }
 });
 
-app.get("/getPublicKeyFromUsername", (req, res) => {
+app.get("/getPublicKeyFromUsername", async (req, res) => {
+  await initialize();
   const { username } = req.body;
   if (!username) {
     return res.status(400).send("Please send all required fields (username)");
@@ -159,6 +139,7 @@ app.get("/getPublicKeyFromUsername", (req, res) => {
 });
 
 app.post("/createTransaction", async (req, res) => {
+  await initialize();
   const { amount, payer, payee, privateKey } = req.body;
   if (!amount || !payer || !payee) {
     return res
@@ -175,15 +156,14 @@ app.post("/createTransaction", async (req, res) => {
     }
 
     await chain.addBlock([transaction]);
-    return res
-      .status(201)
-      .json({ message: "Transaction created successfully" });
+    return res.status(201).json({ message: "Transaction created successfully" });
   } catch (error) {
     return res.status(500).send(error.message);
   }
 });
 
 app.post("/mine/publicKey", async (req, res) => {
+  await initialize();
   const { miner } = req.body;
   if (!miner) {
     return res.status(400).send("Please send all required fields (miner)");
@@ -206,6 +186,7 @@ app.post("/mine/publicKey", async (req, res) => {
 });
 
 app.post("/mine/username", async (req, res) => {
+  await initialize();
   const { miner } = req.body;
   if (!miner) {
     return res.status(400).send("Please send all required fields (miner)");
@@ -227,7 +208,8 @@ app.post("/mine/username", async (req, res) => {
   }
 });
 
-app.get("/checkBalance/publicKey", (req, res) => {
+app.get("/checkBalance/publicKey", async (req, res) => {
+  await initialize();
   const { publicKey } = req.body;
   if (!publicKey) {
     return res.status(400).send("Please send all required fields (publicKey)");
@@ -244,7 +226,8 @@ app.get("/checkBalance/publicKey", (req, res) => {
   }
 });
 
-app.get("/checkBalance/username", (req, res) => {
+app.get("/checkBalance/username", async (req, res) => {
+  await initialize();
   const { username } = req.body;
   if (!username) {
     return res.status(400).send("Please send all required fields (publicKey)");
@@ -269,14 +252,9 @@ app.use((req, res) => {
     );
 });
 
-app.listen(port, async () => {
-  console.log(`Listening at port ${port}`);
+const port = 3000;
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
 });
-
-(async () => {
-  console.log("Starting initialization...");
-  await start();
-  console.log("Setup Complete!");
-})();
 
 export default app;

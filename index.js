@@ -13,28 +13,36 @@ const app = express();
 app.use(express.json());
 
 const uri = "mongodb+srv://findof:OOgZ4o1mEYhMNVmU@bvc.sykvkhs.mongodb.net/?retryWrites=true&w=majority&appName=BVC";
-export const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
-});
-
+export let client;
 let chain;
 let initialized = false;
 
-async function initialize() {
+async function connectToMongoDB() {
+  if (!client) {
+    console.log("Connecting to MongoDB...");
+    client = new MongoClient(uri, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      },
+    });
+    await client.connect();
+    console.log("Connected to MongoDB");
+  }
+}
+
+async function initializeBlockchain() {
   if (initialized) return;
   console.log("Initializing blockchain...");
 
   try {
-    await client.connect();
     const database = client.db("blockchain");
     const collection = database.collection("BVC");
 
     const result = await collection.findOne({ chainId: 1 });
     if (result) {
+      console.log("Blockchain data found, reconstructing blockchain...");
       const mining = result.mining.map((block) => {
         const transactions = block.transactions.map(
           (tx) =>
@@ -80,12 +88,14 @@ async function initialize() {
         mining,
         result.difficulty
       );
+      console.log("Blockchain reconstructed.");
     } else {
+      console.log("No blockchain data found, creating new blockchain...");
       chain = new Blockchain(10000);
       await collection.insertOne({ ...chain });
+      console.log("New blockchain created and saved.");
     }
 
-    console.log("Blockchain initialized.");
     initialized = true;
   } catch (error) {
     console.error("Error initializing blockchain:", error);
@@ -93,7 +103,8 @@ async function initialize() {
 }
 
 app.post("/addWallet", async (req, res) => {
-  await initialize();
+  await connectToMongoDB();
+  await initializeBlockchain();
   const username = req.body.username;
   if (!username) {
     return res.status(400).send("Username is required");
@@ -119,7 +130,8 @@ app.post("/addWallet", async (req, res) => {
 });
 
 app.get("/getPublicKeyFromUsername", async (req, res) => {
-  await initialize();
+  await connectToMongoDB();
+  await initializeBlockchain();
   const { username } = req.body;
   if (!username) {
     return res.status(400).send("Please send all required fields (username)");
@@ -139,7 +151,8 @@ app.get("/getPublicKeyFromUsername", async (req, res) => {
 });
 
 app.post("/createTransaction", async (req, res) => {
-  await initialize();
+  await connectToMongoDB();
+  await initializeBlockchain();
   const { amount, payer, payee, privateKey } = req.body;
   if (!amount || !payer || !payee) {
     return res
@@ -163,7 +176,8 @@ app.post("/createTransaction", async (req, res) => {
 });
 
 app.post("/mine/publicKey", async (req, res) => {
-  await initialize();
+  await connectToMongoDB();
+  await initializeBlockchain();
   const { miner } = req.body;
   if (!miner) {
     return res.status(400).send("Please send all required fields (miner)");
@@ -186,7 +200,8 @@ app.post("/mine/publicKey", async (req, res) => {
 });
 
 app.post("/mine/username", async (req, res) => {
-  await initialize();
+  await connectToMongoDB();
+  await initializeBlockchain();
   const { miner } = req.body;
   if (!miner) {
     return res.status(400).send("Please send all required fields (miner)");
@@ -209,7 +224,8 @@ app.post("/mine/username", async (req, res) => {
 });
 
 app.get("/checkBalance/publicKey", async (req, res) => {
-  await initialize();
+  await connectToMongoDB();
+  await initializeBlockchain();
   const { publicKey } = req.body;
   if (!publicKey) {
     return res.status(400).send("Please send all required fields (publicKey)");
@@ -227,7 +243,8 @@ app.get("/checkBalance/publicKey", async (req, res) => {
 });
 
 app.get("/checkBalance/username", async (req, res) => {
-  await initialize();
+  await connectToMongoDB();
+  await initializeBlockchain();
   const { username } = req.body;
   if (!username) {
     return res.status(400).send("Please send all required fields (publicKey)");
